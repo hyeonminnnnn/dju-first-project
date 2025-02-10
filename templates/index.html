@@ -1,0 +1,128 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interior Design Image Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* 스피너 스타일 */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 메시지 스타일 */
+        .loading-message {
+            font-size: 1.2em;
+            color: #555;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        /* 영어 입력만 허용 메시지 */
+        .english-only-message {
+            color: #f44336;
+            font-size: 1em;
+            margin-top: 5px;
+            text-align: center; /* 왼쪽 정렬 */
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>인테리어 디자인 이미지 생성기</h1>
+        <form id="imageForm">
+            <label for="prompt">프롬프트 입력:</label>
+            <input type="text" id="prompt" name="prompt" placeholder="ex) white room" required>
+            
+            <!-- 영어만 입력 가능합니다 메시지 (왼쪽 정렬) -->
+            <div class="english-only-message">
+                *현재 영어만 입력 가능합니다.
+            </div>
+
+            <button type="submit">이미지 생성</button>
+        </form>
+
+        <div id="result" style="margin-top: 20px;">
+            <!-- 생성된 이미지가 여기에 출력됩니다 -->
+            <img id="generatedImage" src="" alt="Generated Image" style="max-width: 100%; height: auto; display: none;">
+            
+            <!-- 로딩 중 표시 -->
+            <div id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <div class="loading-message">이미지를 생성 중입니다. 잠시만 기다려 주세요.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById("imageForm").addEventListener("submit", async function (e) {
+            e.preventDefault();
+            const prompt = document.getElementById("prompt").value;
+
+            // 영어만 입력 체크 (정규식으로 영어만 확인)
+            const englishRegex = /^[A-Za-z\s]+$/;
+            if (!englishRegex.test(prompt)) {
+                // 영어 이외의 문자가 포함되었으면 alert로 메시지 표시
+                alert("영어만 입력 가능합니다.");
+                return;
+            }
+
+            // 이미지 영역 초기화 (이미지 숨기기)
+            const generatedImage = document.getElementById("generatedImage");
+            const loadingDiv = document.getElementById("loading");
+            const resultDiv = document.getElementById("result");
+
+            // 로딩 메시지와 스피너 보이기
+            generatedImage.style.display = "none";
+            loadingDiv.style.display = "block";
+
+            // Flask API 호출
+            const response = await fetch("/generate", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ prompt: prompt })  // JSON 형식으로 데이터 보내기
+            });
+
+            const result = await response.json();
+
+            // 일정 시간 후 이미지 업데이트
+            setTimeout(() => {
+                if (result.image_url) {
+                    // 쿼리 파라미터 추가하여 캐시 방지
+                    generatedImage.src = result.image_url + "?t=" + new Date().getTime();
+                    generatedImage.style.display = "block";  // 이미지 다시 보이기
+                } else if (result.error) {
+                    if (result.error.includes("Max requests total reached")) {
+                        resultDiv.innerHTML = `<p style="color: red;">요청이 너무 많습니다. 잠시 후 다시 시도해주세요.</p>`;
+                    } else if(result.error.includes("Model is currently loading")){
+                        resultDiv.innerHTML = `<p style="color: red;">모델이 현재 로딩 중입니다. 잠시 후 다시 시도해주세요. 예상 대기 시간: ${result.estimated_time.toFixed(0)}초</p>`;
+                    } 
+                    else {
+                        resultDiv.innerHTML = `<p style="color: red;">Error: ${result.error}</p>`;
+                    }
+                } else {
+                    resultDiv.innerHTML = `<p style="color: red;">An unexpected error occurred.</p>`;
+                }
+
+                // 로딩 메시지 숨기기
+                loadingDiv.style.display = "none";
+            }, 3000);  // 3초 후 이미지 업데이트
+        });
+    </script>
+</body>
+</html>
